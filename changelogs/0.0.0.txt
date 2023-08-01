@@ -1,0 +1,20 @@
+immudex-lhe 0.0.0 - wydanie początkowe
+
+  1. Wydanie odchudzonej wersji immudex, zmienione zostało:
+     - wersja bazowa z Debian 12 Bookworm (stable) na Debian 10 Buster
+        (oldoldstable),
+     - środowisko graficzne XFCE zastąpił X.org z menedżerem okiem Ratpoison,
+     - Mendżer wyświetlania LightDM zastąpił klasyczny XDM,
+     - Większość programów (okienkowych) zostało zastąpione terminalowymi
+        odpowiednikami za wyjątkiem programu MPV.
+     - Firefox w gałęzi ESR, zastąpił GNU IceCat.
+     - Bez zmian pozostały narzędzia autorskie immudex, jak np. immudex_crypt
+        czy pl.
+     - Ładny emulator terminala zastąpiono, surowym program XTerm o klasyczym,
+        domyślnym kroju czcionki.
+     - NetworkManagera zastąpiono klasycznym dla GNU/Linux Debian rozwiązaniem
+        ifupdown, połączenia bezprzewodowe wspierane są przez daemona IWD od
+        firmy Intel.
+     - System w stanie spoczynku pobiera 100MB pamięci RAM.
+     - Zablokowano również dostęp do superużytkownika. Uprawnienia
+        administratora uzyskuje się za pomocą polecenia 'sudo'.
