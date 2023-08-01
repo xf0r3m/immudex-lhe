@@ -1,0 +1,6 @@
+wget https://ftp.task.gda.pl/pub/gnu/gnuzilla/60.7.0/icecat-60.7.0.en-US.gnulinux-i686.tar.bz2
+sudo apt-get install libdbus-glib-1-2
+tar -xjvf icecat-60.7.0.en-US.gnulinux-i686.tar.bz2
+sudo cp -rvv icecat /usr/lib
+sudo chown -R root:root /usr/lib
+ln -s /usr/lib/icecat/icecat /usr/bin/icecat

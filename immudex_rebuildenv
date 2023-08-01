@@ -1,0 +1,116 @@
+#!/bin/bash
+
+set -e
+
+GREEN="\e[32m";
+ENDCOLOR="\e[0m";
+
+if [ "$1" ]; then
+  isoPath=$1;
+  if echo $isoPath | grep -q 'http'; then wget $isoPath; fi
+  filename=$(basename $isoPath);
+  
+  if echo $filename | grep -q 'immudex-testing'; then
+    branch="immudex-testing";
+    branchAltName="testing";
+  elif echo $filename | grep -q 'immudex-niko'; then
+    branch="immudex";
+    branchAltName="niko"
+  elif echo $filename | grep -q 'immudex-lhe'; then
+    branch="immudex-lhe";
+    branchAltName="lhe";
+  else
+    branch="immudex";
+    branchAltName="stable";
+  fi
+
+  if echo $filename | grep -q '64'; then
+    arch="64";
+  else
+    arch="32";
+  fi
+  echo "-== Starting immudex_rebuildenv $(date) ==-" >> immudex_rebuildenv.log;
+  echo -n "Creating necessary directory structure..."; 
+  mkdir -pv build/${branchAltName}/${branch}/${arch}/{chroot,staging} >> immudex_rebuildenv.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+ 
+  rootPath="build/${branchAltName}";
+  #echo -n "Fetching immudex_build script...";
+  #wget https://github.com/xf0r3m/${branch}/raw/main/immudex_build -O build/${branchAltName}/immudex_build >> immudex_rebuildenv.log 2>&1;
+  #if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  
+  #echo -n "Setting execution permissions for immudex_build script..."
+  #chmod +x build/${branchAltName}/immudex_build;
+  #if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+  
+  echo -n "Creating /tmp/iso directory...";
+  mkdir -v /tmp/iso >> immudex_rebuildenv.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  echo -n "Mounting iso image...";
+  sudo mount -v $isoPath /tmp/iso >> immudex_rebuildenv.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  echo -n "Copying iso image content to...";
+  sudo cp -rvv /tmp/iso/* ${rootPath}/${branch}/${arch}/staging >> immudex_rebuildenv.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  echo -n "Setting copied files ownership properly...";
+  sudo chown -Rv ${USER}:${USER} ${rootPath}/${branch}/${arch}/staging >> immudex_rebuildenv.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  echo -n "Unmounting iso image...";
+  sudo umount -v /tmp/iso >> immudex_rebuildenv.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  echo -n "Removing /tmp/iso directory...";
+  sudo rmdir -v /tmp/iso >> immudex_rebuildenv.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+  #echo -n "Creating grub-standalone.cfg file...";
+  #cat > ${rootPath}/${branch}/${arch}/tmp/grub-standalone.cfg <<EOF
+#search --set=root --file /DEBIAN
+#set prefix=($root)/boot/grub
+#configfile /boot/grub/grub.cfg
+#EOF
+  #if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  
+  #echo "-== Print grub-standalone.cfg $(date) ==-" >> immudex_rebuildenv.log;
+  #cat ${rootPath}/${branch}/${arch}/tmp/grub-standalone.cfg >> immudex_rebuildenv.log 2>&1;
+  #echo "-== End Print ==-" >> immudex_rebuildenv.log;
+  
+  echo -n "Unpacking squashfs archive...";
+  sudo unsquashfs -f -d ${rootPath}/${branch}/${arch}/chroot ${rootPath}/${branch}/${arch}/staging/live/filesystem.squashfs >> immudex_rebuildenv.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  
+  echo -n "Creating chroot script...";
+  if [ "$arch" = "64" ]; then
+    linuxKernel="linux-image-amd64";
+  else
+    linuxKernel="linux-image-686-pae";
+  fi
+  cat > chrtcmd.sh <<EOF
+#!/bin/bash
+
+mkdir /boot;
+apt purge -y linux-image*;
+dhclient;
+apt update;
+apt install -y $linuxKernel;
+echo > /root/.bash_history;
+history -c;
+EOF
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  
+  echo "-== Print chrtcmd.sh $(date) ==-" >> immudex_rebuildenv.log;
+  cat chrtcmd.sh >> immudex_rebuildenv.log 2>&1;
+  echo "-== End Print ==-" >> immudex_rebuildenv.log;
+
+  echo -n "Moving chrtcmd.sh script into chroot directory...";
+  sudo mv -v chrtcmd.sh ${rootPath}/${branch}/${arch}/chroot >> immudex_rebuildenv.log;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  
+  echo -n "Executing chrtcmd.sh script into chroot environment...";
+  sudo chroot ${rootPath}/${branch}/${arch}/chroot bash chrtcmd.sh;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  
+  echo -n "Removing unecessary chrtcmd.sh script...";
+  sudo rm -v ${rootPath}/${branch}/${arch}/chroot/chrtcmd.sh >> immudex_rebuildenv.log;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+fi

@@ -1,0 +1,159 @@
+1. Instalacja debiana, jako systemu bazowego do budowania immudex. System nie
+  musi posiadać środowiska graficznego.
+
+2. Instalacja oprogramowania niezbędnego do budowania:
+  - sudo apt install debootstrap squashfs-tools xorriso isolinux syslinux-efi
+     grub-pc-bin grub-efi-amd64-bin mtools dosfstools
+
+3. Utworzenie katalogu dla budowania immudex
+  - mkdir immudex
+
+4. Pobranie pakietów rdzennych:
+  - sudo /sbin/debootstrap (--arch=i386) --arch=amd64 bullseye ~/immudex/chroot http://ftp.icm.edu.pl/debian
+
+5. Zmiana katalogu głównego, na katalog bazowy immudex.
+  - sudo chroot ~/immudex/chroot /bin/bash
+
+6. Pobranie list pakietów:
+  - (chroot)# apt update
+
+7. Instalacją jądro, programu typu init oraz pakietu live-boot
+  - (chroot)# apt install --no-install-recommends linux-image-(686-pae/amd64) live-boot systemd-sysv -y
+
+8. Instalacja pakietów lokalizacyjnych:
+  - (chroot)# apt install tzdata locales keyboard-configuration console-setup -y
+  Na pytania odpowiadamy domyślnie, zachwilę będziemy te pakiety po kolei
+  reconfigurować.
+
+9. Rekonfiguracja pakietów lokalizacyjnych
+  - (chroot)# dpkg-reconfigure tzdata #Europe/Warsaw
+  - (chroot)# dpkg-reconfigure locales #pl_PL.UTF-8 UTF-8
+  - (chroot)# dpkg-reconfigure keyboard-configuration 
+    #Optymalne ustawienia dla języka polskiego
+  - (chroot)# dpkg-reconfigure console-setup #latin2, reszta domyślnie
+
+10. Instalacja środowiska graficznego wraz z oprogramowaniem.
+  - (chroot)# tasksel
+    * Debian desktop enviroment
+    * Xfce
+
+11. Instalacja pakietów dodatkowych.
+  - (chroot)# sudo apt install git vim firejail ufw cryptsetup lsof extlinux grub-efi-amd64 efibootmgr -y
+
+12. Instalacja konfiguracji XFCE - xfcedebian.
+  - (chroot)# cd
+    (chroot)# git clone https://github.com/xf0r3m/xfcedebian.git
+    (chroot)# cd xfcedebian
+    (chroot)# chmod +x install.sh
+    (chroot)# ./install.sh
+
+13. Instalacja katalogu .mozilla (czysty profil z zainstalowanym uBlock Orign).
+  - (chroot)# cd
+    (chroot)# git clone https://github.com/xf0r3m/immudex.git
+    (chroot)# cd immudex
+    (chroot)# tar -xzvf mozilla.tgz -C /etc/skel
+    (chroot)# chown -R root:root /etc/skel/.mozilla
+
+14. Instalacja instalatora oraz skryptu protected.
+  - (chroot)# cp immudex_install protected /usr/local/bin
+    (chroot)# chmod +x /usr/local/bin/{immudex_install,protected}
+
+15. Ustawienie skryptu protected w aktywatorze Mozilla Firefox.
+  - (chroot)# vim /etc/skel/.config/xfce4/panel/launcher-19/16608166085.desktop
+    Zmieniamy w nim poniższe linie:
+    - Name=(Protected) Firefox ESR
+    - Name[pl]=(Protected) Firefox ESR
+    - Exec=/usr/local/bin/protected firefox
+    Zapisujemy zmiany, zamykamy edytor
+
+16. Konfiguracja zapory sieciowej.
+  - (chroot)# ufw default deny incoming
+    (chroot)# ufw default allow outgoing
+    (chroot)# ufw enable 
+
+17. Utworzenie użytkowników i ustawienie hasła dla użytkownika root
+  - (chroot)# useradd -m -s /bin/bash xf0r3m
+    (chroot)# passwd xf0r3m
+    (chroot)# useradd -m -s /bin/bash user
+    (chroot)# passwd user #user1
+    (chroot)# echo "xf0r3m ALL=(ALL:ALL) NOPASSWD:ALL" >> /etc/sudoers
+    (chroot)# echo "user ALL=(ALL:ALL) NOPASSWD:ALL" >> /etc/sudoers
+    (chroot)# passwd #toor
+    (chroot)# usermod -aG libvirt,libvirt-qemu xf0r3m
+    (chroot)# usermod -aG libvirt,libvirt-qemu user
+
+18. Ustawienie nazwy hosta na immudex.
+  - (chroot)# echo "immudex" > /etc/hostname
+    (chroot)# echo "127.0.1.1    immudex" >> /etc/hosts
+
+19. Aktualizacja zainstalowanych dotyczas pakietów.
+  - W pliku repozytorium (/etc/apt/sources.list) zapisujemy poniższe linie:
+    deb http://ftp.icm.edu.pl/pub/Linux/debian/ bullseye main
+    deb-src http://ftp.icm.edu.pl/pub/Linux/debian/ bullseye main
+
+    deb http://security.debian.org/debian-security bullseye-security main
+    deb-src http://security.debian.org/debian-security bullseye-security main
+
+    deb http://ftp.icm.edu.pl/pub/Linux/debian/ bullseye-updates main
+    deb-src http://ftp.icm.edu.pl/pub/Linux/debian/ bullseye-updates main
+    (chroot)# apt update
+    (chroot)# apt upgrade
+    
+
+20. Czyszczenie.
+  - (chroot)# cd 
+    (chroot)# rm -rf immudex/
+    (chroot)# rm -rf xfcedebian/
+    (chroot)# apt-get clean
+    (chroot)# echo > ~/.bash_history
+    (chroot)# history -c
+    Po wykonaniu tej czynności możemy opuścić ten katalog (Ctrl+d)
+
+21. Utworzenie niezbędnej struktury katalogowej:
+  - mkdir -p ~/immudex/{staging/{EFI/boot,boot/grub/x86_64-efi,isolinux,live},tmp}
+
+22. Utworznie archiwun squashfs z obrazem systemu
+  - sudo mksquashfs ~/immudex/chroot ~/immudex/staging/live/filesystem.squashfs -e boot
+
+23. Skopiowanie plików jądra oraz initrd.
+  - cp ~/immudex/chroot/boot/vmlinuz-* ~/immudex/staging/live/vmlinuz
+    cp ~/immudex/chroot/boot/initrd-* ~/immudex/staging/live/initrd
+    * - oznacza sygnaturę najnowszej wersji tych plików.
+
+24. Skopiowanie plików isolinux oraz grub.
+  - cd ~/Pobrane
+    git clone https://github.com/xf0r3m/immudex.git 
+    cp immudex/isolinux/(arch)/* ~/immudex/staging/isolinux
+    cp immudex/grub/(arch)/* ~/immudex/staging/boot/grub
+    (arch) = zależność wobe architektury (i386/amd64).
+
+25. Tworzenie pliku grub-standalone.cfg
+  - Tworzymy plik ~/immudex/tmp/grub-standalone.cfg
+    W tym pliku zapisujemy:
+    search --set=root --file /DEBIAN
+    set prefix=($root)/boot/grub
+    configfile /boot/grub/grub.cfg
+
+26. Utworzenie pustego pliku DEBIAN
+  - touch ~/immudex/staging/DEBIAN
+
+27. Skopiowanie plików isolinux 
+  - cp /usr/lib/ISOLINUX/isolinux.bin ~/immudex/staging/isolinux
+    cp /usr/lib/syslinux/modules/bios/* ~/immudex/staging/isolinux
+
+28. Skopiowanie niezbędnych plików GRUB
+  - cp -r /usr/lib/grub/x86_64-efi/* ~/immudex/staging/boot/grub/x86_64-efi
+
+29. Utworzenie pliku programu ładującego
+  - grub-mkstandalone --format=x86_64-efi --output=/home/user/immudex/staging/EFI/boot/bootx64.efi --locales="" --fonts="" "boot/grub/grub.cfg=/home/user/immudex/tmp/grub-standalone.cfg"
+
+30. Utworzenie partycji EFI dla obrazu.
+  - cd ~/immudex/staging/boot/grub
+    dd if=/dev/zero bs=1M of=efiboot.img count=20
+    sudo mkfs.vfat efiboot.img
+    sudo mmd -i efiboot.img efi efi/boot
+    sudo mcopy -vi efiboot.img /home/user/immudex/staging/EFI/boot/bootx64.efi ::efi/boot
+
+31. Tworzenie obrazu płyty.
+  - cd
+    xorriso -as mkisofs -iso-level 3 -o "immudex(64/32).iso" -full-iso9660-filenames -volid "immudex(64/32)" -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin -eltorito-boot isolinux/isolinux.bin -no-emul-boot -boot-load-size 4 -boot-info-table --eltorito-catalog isolinux/isolinux.cat -eltorito-alt-boot -e /boot/grub/efiboot.img -no-emul-boot -isohybrid-gpt-basdat -append_partition 2 0xef /home/user/immudex/staging/boot/grub/efiboot.img /home/user/immudex/staging

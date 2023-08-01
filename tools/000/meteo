@@ -1,0 +1,22 @@
+#!/bin/bash
+
+function help() {
+  echo "meteo - prognoza pogody z wttr.in"
+  echo "morketsmerke.org @ 2023";
+  echo "Opcje:";
+  echo "  -s - format krótki (aktualna pogoda)";
+  echo "  -l - format długi (format krótki + 2 dniowa prognoza)" 
+  echo "Użycie:";
+  echo "$ meteo <miasto>";
+}
+
+if [ "$1" ]; then
+  if [ "$1" = "-s" ]; then
+    curl wttr.in/${2}?0\&lang=pl;
+  elif [ "$1" = "-l" ]; then
+    curl wttr.in/${2}?lang=pl;
+  fi
+else
+  help;
+  exit 1;
+fi

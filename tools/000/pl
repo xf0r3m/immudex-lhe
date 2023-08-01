@@ -1,0 +1,58 @@
+#!/bin/bash
+
+if [ "$1" ] && [ $1 = "--video" ]; then
+  video=1;
+  shift;
+  if [ $# -gt 1 ]; then format="--ytdl-format=$1"; shift; file=$1;
+  else format="--ytdl-forma=best"; file=$1; fi
+else
+  file=$1;
+fi
+
+function help() {
+  echo "pl - Play Links. Skrypt to odtwarzania multimediów z listy linków";
+  echo "morketsmerke.org; COPYLEFT; 2023";
+  echo;
+  echo "Opcje:";
+  echo;
+  echo -e "\t--video [format] - możliwość odtwarzania linków jako filmów. Format";
+  echo -e "\tjest opcjonalny, w przypadku jego braku, domyślnym formatem jest";
+  echo -e "\t'best'.";
+  echo;
+  echo "Użycie:";
+  echo -e "\t$ pl sciezka/do/listy/linkow";
+  echo;
+  echo "Format listy:";
+  echo -e "\tnazwa linku: https://youtube.com/...";
+}
+if [ "$1" ]; then 
+  PS3="Link: ";
+  linkNames=$(cut -d ":" -f 1 $1 | sed 's/\ /_/g' | awk '{printf $1" "}')
+  select name in $linkNames; do
+    if [ "$MPVPID" ]; then kill $MPVPID; fi
+    if [ ! "$name" ]; then break; fi
+    link=$(grep "$name" $file | cut -d ":" -f 2-);
+    if [ ! "$link" ]; then
+      linkName=$(echo $name | sed 's/_/\ /g');
+      link=$(grep "$linkName" $file | cut -d ":" -f 2-);
+    fi
+    if echo $link | grep -q "youtube"; then
+      link=$(echo $link | sed 's/\ //g');
+      if [ "$video" ]; then
+        #ytplay -v $link -f $format
+        mpv $format ytdl://$link > /dev/null 2>&1 & MPVPID=$!
+      else
+        #ytplay -a $link -f best[height=360]
+        format="--no-video --ytdl-format=best[height=360]"; 
+        mpv $format ytdl://$link > /dev/null 2>&1 & MPVPID=$!
+      fi
+    else
+      mpv --no-video $link > /tmp/pl.log 2>&1 & MPVPID=$!;
+      tail -f /tmp/pl.log | grep "icy-title" &
+    fi
+    #echo "MPV: $MPVPID";
+  done
+else
+  help;
+  exit 1;
+fi

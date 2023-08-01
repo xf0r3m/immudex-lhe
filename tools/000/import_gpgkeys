@@ -1,0 +1,7 @@
+#!/bin/bash
+
+if [ -f ~/public.gpg ] && [ -f ~/private.gpg ] && [ -f ~/otrust.txt ]; then
+  gpg --import ~/public.gpg
+  gpg --import ~/private.gpg
+  gpg --import-ownertrust ~/otrust.txt
+fi

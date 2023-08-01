@@ -1,0 +1,104 @@
+#!/bin/bash
+
+GREEN="\e[32m";
+YELLOW="\e[33m";
+ENDCOLOR="\e[0m";
+
+function help() {
+  echo "create_media - script used for write iso image to usb drive(mainly)";
+  echo "morketsmerke.net COPYLEFT @ 2022";
+  echo "Options:";
+  echo "  --i386-efi - creating 32-bit EFI usb drive with iso image";
+  echo "  (comapatible with immudex only iso images)";
+  echo "  --nuke - write 0 to 1st megabyte of disk";
+  echo "Usage:";
+  echo "  $ create_media [--i386-efi] [--nuke] <usb_disk> [iso_image]";
+}
+
+if [ "$1" ] && [ "$1" = "--i386-efi" ]; then target="i386-efi"; shift; fi
+if [ "$1" ] && [ "$1" = "--nuke" ]; then target="nuke"; shift; fi
+if [ "$1" ] && echo $1 | grep -Eq '/dev/(sd[a-z]|vd[a-z]|mmcblk[0-9])'; then
+  disk=$1; shift;
+else
+  help;
+  exit 1;
+fi
+if [ ! "$target" ] || [ "$target" != "nuke" ]; then
+  if [ "$1" ] && file $1 | grep -q 'ISO 9660'; then 
+    iso=$1;
+  else
+    help;
+    exit 1;
+  fi
+fi
+
+if [ "$target" = "i386-efi" ]; then
+  echo -n "Writing zeros to 1st megabyte on disk..."; 
+  sudo dd if=/dev/zero bs=1M of=$disk count=1 > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+
+  echo -n "Creating MS-DOS partitionig scheme on disk..."; 
+  sudo parted $disk mklabel msdos > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+  
+  echo -n "Creating FAT-32 partition...";
+  sudo parted $disk mkpart primary fat32 1 100%Free > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+
+  echo -n "Creating VFAT filesystem on partition...";
+  sudo mkfs.vfat ${disk}1 > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+
+  echo -n "Creating /mnt/usb directory...";
+  sudo mkdir /mnt/usb > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]";
+  else echo -e "[${YELLOW}Directory exist!${ENDCOLOR}]"; fi
+  
+  echo -n "Mounting VFAT partition on /mnt/usb...";
+  sudo mount ${disk}1 /mnt/usb > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+
+  echo -n "Instalation GRUB on disk...";
+  sudo grub-install --target=i386-efi --efi-directory=/mnt/usb --boot-directory=/mnt/usb/boot --bootloader-id=boot --removable > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+
+  echo -n "Creating /mnt/iso directory...";
+  sudo mkdir /mnt/iso > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]";
+  else echo -e "[${YELLOW}Directory exist!${ENDCOLOR}]"; fi
+
+  echo -n "Mounting iso file on /mnt/iso...";
+  sudo mount $iso /mnt/iso > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+
+  echo -n "Copying grub config files to the disk...";
+  sudo cp /mnt/iso/boot/grub/font.pf2 /mnt/usb/boot/grub > /dev/null 2>&1;
+  sudo cp /mnt/iso/boot/grub/grub.cfg /mnt/usb/boot/grub > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+
+  echo -n "Copying immudex files to the disk..."; 
+  sudo cp -r /mnt/iso/live /mnt/usb > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+  
+  echo -n "Creating empty DEBIAN file...";
+  sudo touch /mnt/usb/DEBIAN > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+  
+  echo -n "Umounting all mounted filesystems...";
+  sudo umount /mnt/* > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+
+elif [ "$target" = "nuke" ]; then
+  echo -n "Writing zeros to 1st megabyte on disk..."; 
+  sudo dd if=/dev/zero bs=1M of=$disk count=1 > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+
+else
+  echo -n "Writing zeros to 1st megabyte on disk..."; 
+  sudo dd if=/dev/zero bs=1M of=$disk count=1 > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+
+  echo -n "Writing iso image to the disk..."
+  sudo dd if=$iso bs=1M of=$disk > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[${GREEN}OK${ENDCOLOR}]"; fi
+fi 

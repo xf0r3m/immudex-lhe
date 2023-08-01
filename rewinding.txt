@@ -1,0 +1,35 @@
+Możliwe jest dokonanie zmian w archiwum .squashfs. Wymaga to trochę zachodu
+i nieco więcej zasobów. 
+
+Na początku należy zainstalować pakiet squashfs-tools. Chcąc rozpakować
+archiwum należy dysponować ilością wolnej pamięci operacyjnej powyżej 500MB.
+
+Rozpakowanie archiwum należy rozpocząć od utworzenienia katalogu docelowego.
+Na przykład katalogu chroot na dysku (dodatkowej partycji, poza instalacją
+immudex). Następnie możemy wydać poniższe polecenie:
+
+sudo unsquashfs -f -d chroot/ /run/live/medium/live/filesystem.squashfs
+
+Za pomocą tego polecenie całe archiwum zostanie wypakowane do tego katalogu,
+w którym możemy dowolnie zmieniać. Po zakończeniu wprowadzania zmian,
+pliki z katalogu należy spakować do archiwum .squashfs.
+
+sudo mksquashfs chroot filesystem.squashfs -e boot
+
+Tak utworzone archiwum należy skopiować na dysk, poprzedzając to zmianą
+opcji montowania dysku w systemie. Po skopiowaniu archium system należy
+niezwłocznie uruchomić ponownie.
+
+sudo mount /dev/vda1 /run/live/medium -o remount,rw
+
+Zapobiegawczo usuwam stare archiwum, aby nie powodowało potencjalnego
+konfliktu podczas kopiowania nowego. O wiele lepszym rozwiązaniem jest
+pozostawienie starego archiwum w ramach kopii. W momencie gdy coś nie
+zadziała nie zostaniemy uziemieni na czas pobrania nowego archiwum z
+sourceforge.net
+
+sudo rm /run/live/medium/live/filesystem.squashfs
+
+sudo cp filesystem.squashfs /run/live/medium/live
+
+sudo reboot

@@ -1,0 +1,162 @@
+#!/bin/bash
+
+function help() {
+
+  echo "immudex_crypt - script used for listing, open and close crypt_LUKS ppartitions";
+  echo "morketsmerke.org COPYLEFT @ 2023";
+  echo "Options:";
+  echo "  list - displaing list of opened and available crypt_LUKS devices";
+  echo "  create - formatting device for crypt_LUKS";
+  echo "  open - opening crypt_LUKS device, after this device is ready to mount";
+  echo "  close - unmount and closing crypt_LUKS devices";
+  echo "Using:";
+  echo "$ immudex_crypt list";
+  echo "$ immudex_crypt create <disk partition>";
+  echo "$ immudex_crypt open <crypt_LUKS device>";
+  echo "$ immudex_crypt close immudex_crypt[0-9] | ic[0-9] | [0-9]";
+}
+
+function list() {
+
+  mapperDeviceList=$(ls /dev/mapper --hide=control | awk '{printf $1" "}');
+  
+  echo "==============================================================";
+  echo -e "Opened devices:";
+  echo "==============================================================";
+  echo -e "Device:\t\tMapper name:\t\tMount point:";
+
+  if [ "$mapperDeviceList" ]; then
+  	  for dmDevice in $mapperDeviceList; do
+		    if sudo cryptsetup status /dev/mapper/${dmDevice} > /dev/null 2>&1; then
+			    mountPoint=$(df --output=source,target /dev/mapper/${dmDevice} | tail -n 1 | awk '{printf $2}');
+          device=$(sudo cryptsetup status /dev/mapper/${dmDevice} | grep "device" | awk '{printf $2}');
+    		  if [ "$mountPoint" ] && [ "$mountPoint" != "/dev" ]; then
+            echo -e "$device\t /dev/mapper/${dmDevice}\t$mountPoint"; 
+          else
+            echo -e "$device\t /dev/mapper/${dmDevice}\tNot mounted";
+			    fi
+		    fi
+	    done 
+  else
+    echo -e "No opened crypt devices was found";
+  fi
+  echo "==============================================================";
+
+  luksDevicesList=$(sudo blkid | grep 'LUKS' | cut -d ":" -f 1 | awk '{printf $1" "}');
+
+  echo "==============================================================";
+  echo -e "crypt_LUKS devices:";
+  echo "==============================================================";
+  echo -e "Device:\t\tMapper name:\t\tMount point:";
+
+  if [ "$luksDevicesList" ]; then
+    for lDevice in $luksDevicesList; do
+      echo -e "$lDevice";
+    done
+  else
+    echo "No crypt device was found";
+  fi
+  echo "==============================================================";
+}
+
+function open() {
+
+  if [ $# -lt 1 ]; then help; exit 1;
+  else
+    index=$(ls --hide=control /dev/mapper | grep "immudex_crypt" | grep -o "[0-9]*$"| tail -1);
+    if [ "$index" ]; then
+      index=$((index + 1));
+    else
+      index=0;
+    fi
+    sudo cryptsetup open $1 immudex_crypt${index};
+    sudo mkdir -p /media/${USER}/immudex_crypt${index};
+    dmDevice=$(ls -l /dev/mapper/immudex_crypt${index} | awk '{printf $11}' | cut -d "/" -f 2);
+    if ! $(sudo file -s /dev/${dmDevice} | grep -q 'ext4'); then
+      echo "Could not determine filesystem of unlocked device.";
+      echo -n "Format this device to ext4? (y/n): "
+      read format;
+      if [ "$format" = "y" ]; then
+        sudo mkfs.ext4 /dev/mapper/immudex_crypt${index};
+      else
+        echo "Refuse to mount.";
+        sudo cryptsetup close immudex_crypt${index};
+        exit 1;
+      fi
+    fi
+    sudo mount /dev/mapper/immudex_crypt${index} /media/${USER}/immudex_crypt${index};
+    if [ ! -e /ic${index} ]; then
+      sudo ln -s /media/${USER}/immudex_crypt${index} /ic${index};
+    fi
+  fi
+
+}
+
+function close() {
+
+  if [ $# -lt 1 ]; then help; exit 1;
+  else
+    if [ $1 -ge 0 ] 2> /dev/null; then
+        cryptfsName="immudex_crypt${1}";
+    elif echo $1 | grep -q 'ic'; then
+        cryptfsName="immudex_crypt$(echo $1 | grep -o '[0-9]')";
+    else
+        cryptfsName=$1;
+    fi
+    if sudo cryptsetup status /dev/mapper/${cryptfsName} > /dev/null 2>&1; then
+      mountPoint=$(df --output=source,target /dev/mapper/${cryptfsName} | tail -1 | awk '{printf $2}');
+      if [ "$mountPoint" ] && [ "$mountPoint" != "/dev" ]; then
+        sudo umount -R $mountPoint;
+        sudo cryptsetup close ${cryptfsName};
+      else
+        sudo cryptsetup close ${cryptfsName};
+      fi
+    else
+      echo "Given devices isn't opened crypt device or it was closed before";
+    fi
+  fi
+}
+
+function create() {
+  if [ $# -lt 1 ]; then help; exit 1;
+  else
+    sudo cryptsetup -y -v luksFormat $1;
+  fi
+}
+
+function set_ownership(){
+  if [ $# -lt 1 ]; then help; exit 1;
+  else
+    mountPoint=$(list | grep "$USER" | grep "$1" | awk '{printf $3}')
+    owner=$(stat -c %u $mountPoint);
+    if [ $owner -eq $UID ]; then 
+      if id $USER | grep -q $UID; then
+        echo "User $USER is already owner of $mountPoint";
+      fi
+    else
+      sudo chown ${USER}:${USER} $mountPoint;
+    fi
+  fi
+}
+
+if [ "$1" ]; then
+
+  case $1 in
+    "list") list;;
+    "open") if [ "$2" ]; then open $2;
+            else help; exit 1;
+            fi;;
+    "close") if [ "$2" ]; then close $2;
+            else help; exit 1;
+            fi;;
+    "create") if [ "$2" ]; then 
+                create $2;
+                open $2;
+                set_ownership $2; 
+              else help; exit 1;
+              fi;;
+          *) help;;
+  esac
+else
+  help; exit 1;
+fi  

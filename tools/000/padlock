@@ -1,0 +1,71 @@
+#!/bin/bash
+
+#launcher="/home/${USER}/.config/xfce4/panel/launcher-14/16844255236.desktop";
+
+function main_unlock() {
+  /usr/local/bin/immudex_crypt open $1;
+  #index=$(basename $(/usr/local/bin/immudex_crypt list | grep "$1" | head -1 | awk '{printf $2}' | grep -o '[0-9]'));
+  #sudo mkdir -p /media/${USER}/$devName;
+  #sudo mount /dev/mapper/$devName /media/${USER}/$devName;
+  
+  #xfce4-terminal --default-working-directory=/ic${index};
+  #sed -i 's/padlock-icon/changes-allow/' ${launcher};
+  #sudo rm /usr/share/icons/padlock-icon.png;
+  #sudo ln -s /usr/share/icons/changes-allow.png /usr/share/icons/padlock-icon.png;
+
+}
+
+function unlock() {
+
+  cryptParts=$(sudo blkid | grep 'LUKS' | sed 's/://g' | awk '{printf $1" "}');
+  if [ "$cryptParts" ]; then
+    if [ $(echo $cryptParts | wc -w) -gt 1 ]; then
+      select cryptPart in $cryptParts; do
+        main_unlock $cryptPart;
+        break;
+      done
+    else
+      main_unlock $cryptParts;
+    fi
+  else
+    echo -e "\e[31mThere is no LUKS partition to open.\e[0m";
+    sleep 3;
+  fi
+}
+
+function lock() {
+
+  mapperDeviceList=$(ls /dev/mapper --hide=control | awk '{printf $1" "}');
+
+  if [ "$mapperDeviceList" ]; then
+	  for dmDevice in $mapperDeviceList; do
+		  if sudo cryptsetup status /dev/mapper/${dmDevice} > /dev/null 2>&1; then
+			  mountPoint=$(df --output=source,target /dev/mapper/${dmDevice} | tail -n 1 | awk '{printf $2}');
+			  if [ "$mountPoint" ]; then
+				  if $(sudo lsof $mountPoint > /dev/null 2>&1); then
+					  echo "Padlock: The /dev/mapper/${dmDevice} cannot be unmount, because there are opened file or running proceses.";
+				  else
+					  sudo umount $mountPoint;
+            if [ $? -ne 0 ]; then
+              echo "Padlock: The /dev/mapper/${dmDevice} cannot be unmount, because there are other filesystem is mounted in.";
+            fi
+					  sudo cryptsetup close /dev/mapper/${dmDevice};
+				  fi
+			  else
+          sudo cryptsetup close /dev/mapper/${dmDevice};
+			  fi
+		  fi
+	  done
+  fi
+  #if ! $(df -h | grep -q '/dev/mapper'); then
+  #  sed -i 's/changes-allow/padlock-icon/' ${launcher};
+    #sudo rm /usr/share/icons/padlock-icon.png;
+    #sudo ln -s /usr/share/icons/changes-prevent.png /usr/share/icons/padlock-icon.png;
+  #fi 
+}
+
+mapperDeviceList=$(ls /dev/mapper --hide=control | awk '{printf $1" "}');
+
+if [ "$mapperDeviceList" ]; then lock;
+else unlock;
+fi

@@ -1,0 +1,204 @@
+#!/bin/bash
+
+GREEN="\e[32m";
+ENDCOLOR="\e[0m";
+
+set -e
+
+echo "-== Starting immudex_build: $(date) ==-" >> immudex_build.log;
+
+function help() {
+  echo "-== Help printed: $(date) ==-" >> immudex_build.log;
+  echo "immudex_build - script for building immudex LiveCD.";
+  echo "@ 2023 morketsmerke.org";
+  echo "Options:";
+  echo " --update - scripts doing only three activities, which";
+  echo "  commonly used when upgrading LiveCD image";
+  echo "Usage:";
+  echo " ./immudex_build [--update]";
+}
+
+function create_enviroment() {
+  echo -n "Installation of packages needed to build immudex...";
+  sudo apt update >> ~/immudex_build.log 2>&1;
+  sudo apt install -y debootstrap squashfs-tools xorriso isolinux syslinux-efi grub-pc-bin mtools dosfstools >> immudex_build.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+}
+
+#Under this condition i put three activities, which are taking
+#place after updates in chroot environment.
+if [ "$1" ] && [ "$1" = "--update" ]; then
+  arch=32;
+
+  if [ ! -f /sbin/debootstrap ]; then
+    create_enviroment
+  fi
+
+  #Purging staging/live catalog:
+  echo -n "Purging staging/live catalog...";
+  sudo rm -vf ~/immudex-lhe/${arch}/staging/live/* >> ~/immudex_build.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+  #Removing old iso files:
+  echo -n "Removing old iso image...";
+  sudo rm -vf ~/immudex-lhe/${arch}/immudex${arch}.iso >> ~/immudex_build.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  
+  #Creating squashfs archive:
+  echo -n "Creating squashfs archive...";
+  sudo mksquashfs ~/immudex-lhe/${arch}/chroot ~/immudex-lhe/${arch}/staging/live/filesystem.squashfs -e boot >> ~/immudex_build.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+  #Copying kernel and initrd (core files) from chroot:
+  echo -n "Copying kernel and initrd (core files) from chroot...";
+  cp -v $(ls -v ~/immudex-lhe/${arch}/chroot/boot/vmlinuz-* | tail -1) ~/immudex-lhe/${arch}/staging/live/vmlinuz >> ~/immudex_build.log 2>&1;
+  cp -v $(ls -v ~/immudex-lhe/${arch}/chroot/boot/initrd.img-* | tail -1) ~/immudex-lhe/${arch}/staging/live/initrd >> ~/immudex_build.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+  if [ "$2" ]; then
+	  echo -n "Creating version file...";
+	  echo $2 > ~/immudex-lhe/${arch}/staging/live/version;
+	  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  fi
+
+  #Create iso image:
+  echo -n "Creating iso image...";
+  cd ~/immudex-lhe/${arch};
+  xorriso as mkisofs -iso-level 3 -o "immudex-lhe32.iso" -full-iso9660-filenames -volid "immudex-lhe" -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin -eltorito-boot isolinux/isolinux.bin -no-emul-boot -boot-load-size 4 -boot-info-table --eltorito-catalog isolinux/isolinux.cat ~/immudex-lhe/${arch}/staging >> ~/immudex_build.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+  exit 0;
+fi
+
+#Determing requested architecture and
+arch=32;
+
+if [ ! -f /sbin/debootstrap ]; then
+  create_enviroment 
+  #Creating enviroment:
+  #echo -n "Installation of packages needed to build immudex...";
+  #sudo apt update >> ~/immudex_build.log 2>&1;
+  #sudo apt install -y debootstrap squashfs-tools xorriso isolinux syslinux-efi grub-pc-bin grub-efi-amd64-bin mtools dosfstools >> immudex_build.log 2>&1;
+  #if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+fi
+
+#Creating root directory sturcture for immudex build:
+if [ ! -d ~/immudex-lhe/${arch} ]; then
+  echo -n "Creating root directory structure for immudex build...";
+  mkdir -pv ~/immudex-lhe/${arch} >> immudex_build.log 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+fi
+
+#Fetching testing vanilla Debian base system files:
+echo -n "Fetching oldoldstable vanilla Debian base system files...";
+sudo /sbin/debootstrap --arch=i386 oldoldstable ~/immudex-lhe/${arch}/chroot http://deb.debian.org/debian >> ~/immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Getting project files:
+echo -n "Getting project files...";
+mkdir -v ~/Pobrane >> ~/immudex_build.log 2>&1;
+cd ~/Pobrane;
+export GIT_SSH_COMMAND="ssh -p 2022";
+git clone ssh://git@searx.morketsmerke.org/~/immudex-lhe.git >> ~/immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+
+#Copying chroot script to chroot directory:
+echo -n "Copying chroot script to chroot directory...";
+sudo cp -vv immudex-lhe/versions/base.sh ~/immudex-lhe/${arch}/chroot >> ~/immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Executing chroot script, at least i trying:
+sudo chroot ~/immudex-lhe/${arch}/chroot /bin/bash /base.sh $arch;
+
+#Removing chroot script.
+echo -n "Remove chroot script...";
+sudo rm -vf ~/immudex-lhe/${arch}/chroot/base.sh >> immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#versionsList=$(ls -v ~/Pobrane/immudex/versions --hide=base.sh | awk '{printf $1" "}');
+#for i in $versionsList; do
+#	echo -n "Executing version script: $i ...";
+#	sudo cp -v ~/Pobrane/immudex/versions/${i} ~/immudex/${arch}/chroot >> ~/immudex_build.log 2>&1;
+#	sudo chroot ~/immudex/${arch}/chroot /bin/bash $i;
+#	sudo rm -vf ~/immudex/${arch}/chroot/${i} >> ~/immudex_build.log 2>&1;
+#	if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+#done
+
+#Creating LiveCD directory structure:
+echo -n "Creating LiveCD directory structure...";
+mkdir -pv ~/immudex-lhe/${arch}/staging/{isolinux,live} >> immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Creating squasfs archive:
+echo -n "Creating squashfs archive...";
+sudo mksquashfs ~/immudex-lhe/${arch}/chroot ~/immudex-lhe/${arch}/staging/live/filesystem.squashfs -e boot >> immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Copying kernel and initrd (core files) from chroot:
+echo -n "Copying kernel and initrd (core files) from chroot...";
+cp -v $(ls -v ~/immudex-lhe/${arch}/chroot/boot/vmlinuz-* | tail -1) ~/immudex-lhe/${arch}/staging/live/vmlinuz >> immudex_build.log 2>&1;
+cp -v $(ls -v ~/immudex-lhe/${arch}/chroot/boot/initrd.img-* | tail -1) ~/immudex-lhe/${arch}/staging/live/initrd >> immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Getting and copying bootloader files
+echo -n "Copying bootloader files...";
+#arch2=$(echo $1 | sed 's/-//g');
+cp -v immudex-lhe/isolinux/i386/* ~/immudex-lhe/${arch}/staging/isolinux >> ~/immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Removing Pobrane dir
+echo -n "Removing Pobrane directory...";
+cd ~;
+rm -rvf ~/Pobrane >> ~/immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Create grubstandalone config:
+#echo "-==Create grub-standalone config: $(date)==-" >> ~/immudex_build.log;
+#echo -n "Create grub-standalone config...";
+#cat >> ~/immudex-testing/${arch}/tmp/grub-standalone.cfg <<EOF
+#search --set=root --file /DEBIAN
+#set prefix=(\$root)/boot/grub
+#configfile /boot/grub/grub.cfg
+#EOF
+#if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+
+#Create an empty file, which will be used to set root directory for GRUB:
+#echo "-==Create empty file for setting root directory for GRUB: $(date)==-" >> ~/immudex_build.log;
+#echo -n "Create empty file for GRUB...";
+#touch ~/immudex-testing/${arch}/staging/DEBIAN;
+#if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Copying isolinux files:
+echo -n "Copiying isolinux files...";
+cp -v /usr/lib/ISOLINUX/isolinux.bin ~/immudex-lhe/${arch}/staging/isolinux >> immudex_build.log 2>&1;
+cp -v /usr/lib/syslinux/modules/bios/* ~/immudex-lhe/${arch}/staging/isolinux >> immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Copying grub files:
+#echo -n "Copying isolinux files...";
+#cp -rv /usr/lib/grub/x86_64-efi/* ~/immudex-lhe/${arch}/staging/boot/grub/x86_64-efi >> immudex_build.log 2>&1;
+#if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Creating grub-efi bootloader file:
+#echo "-==Creating grub-efi bootloader file: $(date)==-" >> immudex_build.log;
+#echo -n "Creating grub-efi bootloader file...";
+#myHOME=$(pwd);
+#grub-mkstandalone --format=x86_64-efi --output=${myHOME}/immudex-testing/${arch}/staging/EFI/boot/bootx64.efi --locales="" --fonts="" "boot/grub/grub.cfg=${myHOME}/immudex-testing/${arch}/tmp/grub-standalone.cfg";
+#if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Creating additional EFI partition:
+#cd ~/immudex-testing/${arch}/staging/boot/grub;
+#echo -n "Creating addtitional EFI partition...";
+#dd if=/dev/zero bs=1M of=efiboot.img count=20 >> ~/immudex_build.log 2>&1;
+#sudo mkfs.vfat efiboot.img >> ~/immudex_build.log 2>&1;
+#echo "-==Creating MS-DOS directory: $(date)==-" >> ~/immudex_build.log;
+#sudo mmd -i efiboot.img efi efi/boot >> ~/immudex_build.log 2>&1;
+#sudo mcopy -vi efiboot.img ~/immudex-testing/${arch}/staging/EFI/boot/bootx64.efi ::efi/boot >> ~/immudex_build.log 2>&1;
+#if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+#Create iso image:
+echo -n "Creating iso image...";
+cd ~/immudex-lhe/${arch};
+xorriso as mkisofs -iso-level 3 -o "immudex-lhe32.iso" -full-iso9660-filenames -volid "immudex-lhe" -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin -eltorito-boot isolinux/isolinux.bin -no-emul-boot -boot-load-size 4 -boot-info-table --eltorito-catalog isolinux/isolinux.cat ~/immudex-lhe/${arch}/staging >> ~/immudex_build.log 2>&1;
+if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi

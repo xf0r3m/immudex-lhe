@@ -1,0 +1,135 @@
+#!/bin/bash
+
+GREEN="\e[32m";
+YELLOW="\e[33m";
+BLUE="\e[34m";
+ENDCOLOR="\e[0m";
+
+function help() {
+  echo "ytplay - script which could play a video or audio track from youtube";
+  echo "morketsmerke.net COPYLEFT @ 2022";
+  echo "Options:";
+  echo "  -s - search given keyword on youtube.";
+  echo "  -v - play youtube video."
+  echo "  -a - play only youtube video audiotrack";
+  echo "Ommiting -s option, assume you are give a yt video link.";
+  echo "You have to put -v or -a before you paste a yt video link";
+  echo "When you put keywords in -s option, you need to choose";
+  echo "that you want listening an audiotrack (-a) oraz watch video (-v)";
+  echo "Usage:";
+  echo "  $ ytplay -s -a [-f ytdl-format] 'lofi'";
+  echo "  $ ytplay -v https://youtube.com/watch?v=... [-f ytdl-format]";
+  echo "  $ ytplay -a https://youtube.com/watch?v=... [-f ytdl-format]";
+  echo "You can search again the same keywords puting 'r' or 'R' instead";
+  echo "of video numer";
+}
+
+function yt_search() {
+    query=$(echo $* | sed 's/ /+/g');
+    echo -n "Getting youtube site with search results...";
+    wget https://youtube.com/results?search_query=$query -O /tmp/yt.html 2> /dev/null
+    if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+    sed -i 's/,/\n/g' /tmp/yt.html;
+
+    listOfVideos=$(grep -n '^{\"url' /tmp/yt.html | cut -d ":" -f 1 | awk '{printf $1" "}');
+
+    numberOfListElements=$(echo $listOfVideos | wc -w);
+    i=1;
+    lp=1;
+    while [ $i -le $numberOfListElements ]; do
+      if [ $i -eq $numberOfListElements ]; then
+        ln1=$(echo $listOfVideos | cut -d " " -f $i);
+        ln2='$';
+      else
+        j=$((i + 1));
+        ln1=$(echo $listOfVideos | cut -d " " -f $i);
+        ln2=$(echo $listOfVideos | cut -d " " -f $j);
+      fi
+      #if sed -n "${ln1},${ln2}p" /tmp/yt.html | grep -q '"iconType":"LIVE"'; then
+       # i=$((i + 1)); continue;
+      #else
+        title=$(sed -n "${ln1},${ln2}p" /tmp/yt.html | grep 'title' | head -1 | cut -d '"' -f 8);
+        channel=$(sed -n "${ln1},${ln2}p" /tmp/yt.html | grep 'ownerText' | head -1 | cut -d '"' -f 8);
+        duration=$(sed -n "${ln1},${ln2}p" /tmp/yt.html | grep 'simpleText' | sed -n '2p' | cut -d '"' -f 4);
+        if [ "$duration" = "simpleText" ]; then duration="\e[31mLive\e[0m"; fi
+        videoid=$(sed -n "${ln1},${ln2}p" /tmp/yt.html | grep 'videoId' | sed -n '2p' | cut -d '"' -f 4);
+        if [ "$title" ] && [ "$channel" ] && [ "$duration" ] && [ "$videoid" ] && [ "$duration" != "SHORTS" ];  then
+          echo -e "${lp}. ${GREEN}${title}${ENDCOLOR}";
+          echo -e "   Channel: ${YELLOW}${channel}${ENDCOLOR}  Duration: ${BLUE}${duration}${ENDCOLOR}";
+          echo "${lp},${videoid},${title},${channel},${duration}" >> /tmp/yt.csv;
+        else
+          i=$((i + 1)); continue;
+        fi
+      #fi
+      i=$((i + 1));
+      lp=$((lp + 1));
+    done
+}
+
+if [ "$1" ]; then
+  if [ "$1" = "-a" ] || [ "$1" = "-v" ]; then
+    mode=$1;
+    shift;
+    link=$(echo $1 | sed 's@https://@@');
+    if [ $# -gt 1 ]; then
+      shift;
+      if [ "$1" = "-f" ]; then
+        shift;
+        if [ "$mode" = "-a" ]; then 
+          format="--no-video --ytdl-format=${1}";
+        else
+          format="--ytdl-format=${1}";
+        fi
+      fi
+    fi
+  elif [ "$1" = "-s" ]; then
+    if [ -f /tmp/yt.html ]; then rm /tmp/yt.html; fi
+    if [ -f /tmp/yt.csv ]; then rm /tmp/yt.csv; fi
+
+    shift;
+    mode=$1;
+    if ! ([ "$mode" = "-v" ] || [ "$mode" = "-a" ]); then help; exit 1; fi
+    shift;
+    if [ "$1" = "-f" ]; then
+      shift;
+      if [ "$mode" = "-a" ]; then 
+        format="--no-video --ytdl-format=${1}";
+      else
+        format="--ytdl-format=${1}";
+      fi
+    fi
+    while [ true ]; do
+      yt_search $*;
+      echo -n "Put number of which video you want to hear/watch: ";
+      read numberOfVideo;
+      if [[ $numberOfVideo -gt 0 ]]; then break;
+      elif [ "$numberOfVideo" = "r" ] || [ "$numberOfVideo" = "R" ]; then
+        continue;
+      else
+        help;
+        exit 1;
+      fi
+    done
+    title=$(sed -n "${numberOfVideo}p" /tmp/yt.csv | cut -d "," -f 3);
+    channel=$(sed -n "${numberOfVideo}p" /tmp/yt.csv | cut -d "," -f 4);
+    duration=$(sed -n "${numberOfVideo}p" /tmp/yt.csv | cut -d "," -f 5);
+    videoId=$(sed -n "${numberOfVideo}p" /tmp/yt.csv | cut -d "," -f 2);
+    clear;
+    echo -e "Title: ${GREEN}${title}${ENDCOLOR}";
+    echo -e "Channel: ${YELLOW}${channel}${ENDCOLOR} Duration: ${BLUE}${duration}${ENDCOLOR}";
+    echo "====================================================================";
+    link=${videoId}; 
+   else
+    help;
+    exit 1;
+  fi
+  
+  if [ "$mode" = "-a" ]; then 
+      if [ ! "$format" ]; then format="--no-video --ytdl-format=best[height=360]"; fi
+        mpv ${format} ytdl://${link};
+  elif [ "$mode" = "-v" ]; then mpv ${format} ytdl://${link}; fi
+else
+  help;
+  exit 1;
+fi

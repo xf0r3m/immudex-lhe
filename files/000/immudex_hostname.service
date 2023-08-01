@@ -1,0 +1,9 @@
+[Unit]
+Description=Set hostname based on Hardware model
+Before=display-manager.service
+[Service]
+Type=OneShot
+ExecStart=/usr/local/bin/immudex_hostname
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target

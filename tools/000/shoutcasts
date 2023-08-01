@@ -1,0 +1,28 @@
+#!/bin/bash
+
+echo -n "What are you wanna listen? ";
+read search;
+
+function getDataBetweenHtmlMarks() {
+  grep "$1" $2 | sed -n "${3}p" | cut -d ">" -f 2 | cut -d "<" -f 1;
+}
+wget http://dir.xiph.org/search?q=$search -O /tmp/shcast_dir.html >> /dev/null 2>&1;
+if [ ! -s /tmp/shcast_dir.html ]; then
+  echo -e "\e[31mThere is no internet connection.\e[0m";
+  exit 1;
+else
+  amountOfStations=$(grep 'card-title' /tmp/shcast_dir.html | wc -l);
+  i=1;
+  while [ $i -le $amountOfStations ]; do
+    stationName=$(getDataBetweenHtmlMarks 'card-title' /tmp/shcast_dir.html ${i});
+    whatIsPlaying=$(getDataBetweenHtmlMarks 'card-subtitle' /tmp/shcast_dir.html ${i});
+    echo -e "${i}. \e[33m${stationName}\e[0m";
+    echo -e "   \e[32m${whatIsPlaying}\e[0m";
+    i=$((i + 1));
+  done
+  echo -n "Pick a one: ";
+  read numberOfStation;
+  echo $(grep 'Play' /tmp/shcast_dir.html | sed -n "${numberOfStation}p" | cut -d '"' -f 2) | xclip -selection c;
+  echo "Station URL was copied to clipboard";
+  
+fi

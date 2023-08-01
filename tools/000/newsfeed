@@ -1,0 +1,114 @@
+#!/bin/bash
+
+function help() {
+  echo "newsfeed - fetch and browse news feed from rss and atom channels";
+  echo "morketsmerke.net; COPYLEFT @ 2022";
+  echo;
+  echo "Options:";
+  echo "  --list - shows numbered list of names, saved in ~/.newsfeed names and";
+  echo "    URL of rss channels";
+  echo "  --check - fetching new rss channel file from source";
+  echo "  --show <number_of_channel> - shows numbered list of news titles.";
+  echo "    Number of channel you can get from --list option.";
+  echo "  --open <number_of_title> - open web browser on link, which are under";
+  echo "    titles of news on rss channel. Number of title you can get";
+  echo "    from --show option. This option based on the last showed rss";
+  echo "    channel feed.";
+  echo;
+  echo "The ~/.newsfeed file:";
+  echo "  This file is simple csv (semicolon separated values) file which";
+  echo "  store rss channels in one line. One by one. The one line";
+  echo "  contains: name and URL of rss feed. For example:";
+  echo;
+  echo "    News Feed;https://newsfeed.example.org/rss";
+} 
+if [ ! -s ~/.newsfeed ]; then
+  help;
+  exit 1;
+else
+  if [ ! "$1" ] || ([ "$1" != "--list" ] && \
+    [ "$1" != "--check" ] && \
+    [ "$1" != "--show" ] && \
+    [ "$1" != "--open" ]); then
+      help;
+      exit 1;
+  fi
+  amountOfSubscriptions=$(cat ~/.newsfeed | wc -l);
+  i=1;
+  while [ $i -le $amountOfSubscriptions ]; do
+    newsfeedLine=$(sed -n "${i}p" ~/.newsfeed);
+    nameOfSubscription=$(echo $newsfeedLine | cut -d ";" -f 1);
+    rssLink=$(echo $newsfeedLine | cut -d ";" -f 2);
+    if [ "$1" ] && [ "$1" = "--list" ]; then
+      echo -e "${i}. ${nameOfSubscription}";
+    elif [ "$1" ] && [ "$1" = "--check" ]; then
+      echo -e "${i}. ${nameOfSubscription}";
+      echo -n "Getting news feed...";
+      wget $rssLink -O /tmp/new_newsfeed_${i}.xml 2>/dev/null;
+      if [ $? -eq 0 ]; then echo "[ OK ]";
+      else echo -e "\nThere is no Internet connection"; exit 1; fi
+        if [ -s /tmp/newsfeed_${i}.xml ]; then
+        amountOfNewNewses=$(diff /tmp/new_newsfeed_${i}.xml /tmp/newsfeed_${i}.xml | grep '<title>' | wc -l);
+        if [ $amountOfNewNewses -gt 0 ]; then 
+          notify-send "$nameOfSubscription" "New $amountOfNewNewses newses" --icon=/usr/share/icons/rss.png;
+          j=1;
+          sleep 1;
+          while [ $j -le $amountOfNewNewses ]; do
+            news=$(diff /tmp/new_newsfeed_${i}.xml /tmp/newsfeed_${i}.xml | \
+                     grep '<title>' | sed -n "${j}p" | sed 's/<title>//' | \
+                      sed 's/<\/title>//' | sed 's/[<>]//' | \
+                      sed 's/^[[:space:]]*//g');
+            notify-send "newsfeed" "${nameOfSubscription}: ${news}" -t 10000 --icon=/usr/share/icons/rss.png;
+            sleep 1;
+            j=$((j + 1));
+          done
+        fi
+        mv /tmp/new_newsfeed_${i}.xml /tmp/newsfeed_${i}.xml;
+      else
+        mv /tmp/new_newsfeed_${i}.xml /tmp/newsfeed_${i}.xml;
+        amountOfNews=$(grep '<title>' /tmp/newsfeed_${i}.xml | sed -n '2,$p' | wc -l);
+        if [ $amountOfNews -eq 0 ]; then
+          compressed=1;
+          amountOfNews=$(sed 's/<\/title>/\n/g' /tmp/newsfeed_${i}.xml | sed 's/<item>/\n/g' | grep '<title>' | wc -l)
+        fi
+        notify-send "$nameOfSubscription" "New $amountOfNews newses" --icon=/usr/share/icons/rss.png;
+      fi
+    fi
+    i=$((i + 1));
+  done
+  if [ "$1" ] && [ "$1" = "--show" ] && [ "$2" ] && [ $2 -gt 0 ]; then
+    
+    #Parsing
+    #Thanks to the linuxhint.com for command:
+    #sed 's/^[[:space]]*//g'
+    #https://linuxhint.com/trim_string_bash
+
+      if grep -q 'CDATA' /tmp/newsfeed_${2}.xml; then
+        #sed 's/<\/title>/\n/g' /tmp/newsfeed_${2}.xml | \
+        #sed 's/<item>/\n/g' | grep '<title>' | sed -n '2,$p' | \
+        #sed 's/<title>//' | sed 's/&quot;/"/g' | \
+        #sed 's/<!\[CDATA\[//g' | sed 's/\]\]>//g' | \
+        #sed 's/^[[:space:]]*//g' | nl | less;
+        grep -e '<title>' -e '<description>' /tmp/newsfeed_${2}.xml |\
+        sed -n '3,$p' | sed -e 's/<title>//g' -e 's/<description>/>>>/g' |\
+        sed 's/&#[0-9]*;//g' | \
+        sed 's/&quot;//g' | sed -e 's/<!\[CDATA\[//g' -e 's/\]\]>//g' |\
+        sed -e 's/<img.*br\/>/<obrazek>/g' -e 's/^[[:space:]]*//g' \
+        -e 's/<\/description>/\n/g' -e 's/<\/title>//g' | nl -b p^[[:alnum:]] | less
+      else 
+        sed 's/<\/title>/\n/g' /tmp/newsfeed_${2}.xml | \
+        sed 's/<item>/\n/g' | grep '<title>' | sed -n '2,$p' | \
+        sed 's/<title>//' | sed 's/&quot;/"/g' | \
+        sed 's/^[[:space:]]*//g' | nl | less;
+      fi
+      echo $2 > /tmp/lastShowedNewsFeed;
+  elif [ "$1" ] && [ "$1" = "--open" ] && [ "$2" ] && [ $2 -gt 0 ]; then
+    subscriptionNumber=$(cat /tmp/lastShowedNewsFeed);
+    if ! grep -q 'CDATA' /tmp/newsfeed_${subscriptionNumber}.xml; then
+      link=$(sed 's/<\/link>/\n/g' /tmp/newsfeed_${subscriptionNumber}.xml | sed 's/<\/title>/\n/g' | grep '<link>' | sed -n '2,$p' | sed 's/<link>//g' | sed -n "${2}p")
+    else
+      link=$(sed 's/<\/link>/\n/g' /tmp/newsfeed_${subscriptionNumber}.xml | sed 's/<\/description>/\n/g' | grep '<link>' | sed -n '2,$p' | sed 's/<link>//g' | sed -n "${2}p")
+    fi
+    exo-open --launch WebBrowser "$link";
+  fi
+fi

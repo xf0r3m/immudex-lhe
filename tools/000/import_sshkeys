@@ -1,0 +1,12 @@
+#!/bin/bash
+
+if $(ls $HOME | grep -q '.*_rsa.*'); then
+  if [ -d /home/$USER/.ssh ]; then
+   cp -v ~/*_rsa* /home/$USER/.ssh;
+  else
+    mkdir /home/$USER/.ssh;
+    chmod 700 /home/$USER/.ssh;
+    cp -v ~/*_rsa* /home/$USER/.ssh;
+  fi
+fi
+

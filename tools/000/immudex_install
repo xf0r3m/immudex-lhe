@@ -1,0 +1,146 @@
+#!/bin/bash
+
+RED="\e[31m";
+GREEN="\e[32m";
+ENDCOLOR="\e[0m";
+
+while [ true ]; do
+  echo -e "${RED}This script will install immudex on first disk on your machine.${ENDCOLOR}";
+  echo -e "${RED}It could be destructive for data placed on this disk${ENDCOLR}";
+  echo -en "${RED}Are you sure that you want contiune? (y/n): ${ENDCOLOR}";
+  read ans;
+  if [ "$ans" = "y" ]; then break;
+  elif [ "$ans" = "n" ]; then exit 1;
+  fi
+done
+
+set -e
+
+function selectDisk() {
+  disks=$(lsblk | grep 'disk' | awk '{printf $1" "}');
+  if [ $(echo $disks | wc -w) -gt 1 ]; then
+    select drive in $disks; do
+      echo $drive;
+      break;
+    done 
+  else
+	  echo $disks | awk '{printf $1}';
+  fi
+}
+
+if $(sudo efibootmgr > /dev/null 2>&1); then
+#uefi installation
+	#partitioning
+  echo -n "Installation immudex in EFI mode ... ";
+  disk=$(selectDisk);
+  originDisk=$disk;   
+  if [ ! "$disk" ]; then exit 1; fi
+
+  sudo dd if=/dev/zero bs=1M of=/dev/$disk count=1 2> /dev/null
+
+	sudo parted /dev/$disk mklabel msdos > /dev/null 2>&1;
+	sudo parted /dev/$disk mkpart primary 1 101M > /dev/null 2>&1;
+	sudo parted /dev/$disk set 1 boot on > /dev/null 2>&1;
+	sudo parted /dev/$disk mkpart primary 101M 6G > /dev/null 2>&1;
+
+  if $(echo $disk | egrep -qo "mmc|nvme"); then disk="${disk}p"; fi
+	
+	#formatting
+	sudo mkfs.vfat -F32 /dev/${disk}1 > /dev/null 2>&1;
+	sudo mkfs.ext4 /dev/${disk}2 > /dev/null 2>&1;
+
+  #Setting label for partition
+	sudo e2label /dev/${disk}2 "immudex" > /dev/null 2>&1;
+
+	#mount root partition
+	sudo mount /dev/${disk}2 /media > /dev/null 2>&1;
+	
+	#creating directories for efi partition
+	sudo mkdir -p /media/boot/efi > /dev/null 2>&1;
+
+	#mount efi partition
+	sudo mount /dev/${disk}1 /media/boot/efi > /dev/null 2>&1;
+
+	#mount iso image in /mnt directory
+	#sudo mount /dev/sr0 /mnt > /dev/null 2>&1;
+
+	#copying whole iso image to the second partition
+	sudo cp -rvv /run/live/medium/* /media > /dev/null 2>&1;
+  
+  sudo sed -i '/set\ timeout=/ s/30/5/' /media/boot/grub/grub.cfg;  
+  sudo sed -i 's/bootfrom=removable //g' /media/boot/grub/grub.cfg; 
+
+	#removing unnecessary directories from second partition
+	sudo rm -rf /media/isolinux > /dev/null 2>&1;
+	sudo rm -rf /media/EFI > /dev/null 2>&1;
+
+	#GRUB Installation
+  if [ -f /usr/lib/live/mount/medium/EFI/BOOT/BOOTIA32.EFI ]; then
+    target="i386-efi";
+  else
+    target="x86_64-efi";
+  fi
+	sudo grub-install --target=${target} --root-directory=/media --boot-directory=/media/boot --efi-directory=/media/boot/efi --bootloader-id=debian --removable > /dev/null 2>&1;
+
+	#Adding entry to EFI Firmware
+	sudo efibootmgr -c -d /dev/${originDisk} -p 1 -L "Debian" -l '\EFI\BOOT\grubx64.efi' > /dev/null 2>&1;
+
+  #Umount all mounted filesystems
+  sudo umount -R /media > /dev/null 2>&1;
+
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+
+else
+#mbr installation
+  echo -n "Installation immudex in BIOS mode ... ";
+
+	#partitioning
+	disk=$(selectDisk);
+  if [ ! "$disk" ]; then exit 1; fi
+
+  sudo dd if=/dev/zero bs=1M of=/dev/$disk count=1 2> /dev/null
+
+  sudo parted /dev/$disk mklabel msdos > /dev/null 2>&1;
+	sudo parted /dev/$disk mkpart primary 1 6G > /dev/null 2>&1;
+	sudo parted /dev/$disk set 1 boot on > /dev/null 2>&1;
+	
+  if $(echo $disk | egrep -qo "mmc|nvme"); then disk="${disk}p"; fi
+
+	#formatting
+	sudo mkfs.ext4 /dev/${disk}1 > /dev/null 2>&1;
+
+	#Setting label for partition is necessary for extlinux bootloader
+	sudo e2label /dev/${disk}1 "immudex" > /dev/null 2>&1;
+
+	#mount partition in /media directory
+	sudo mount /dev/${disk}1 /media > /dev/null 2>&1;
+
+	#Creating directory for extlinux
+	sudo mkdir /media/extlinux > /dev/null 2>&1;
+	
+	#Instalation extlinux files in abovementioned directory
+	sudo extlinux --install /media/extlinux > /dev/null 2>&1;
+
+	#mount iso image in /mnt directory
+	#sudo mount /dev/sr0 /mnt > /dev/null 2>&1;
+
+	#copying live directory from iso image to partition
+	sudo cp -rvv /run/live/medium/live /media > /dev/null; 2>&1;
+
+	#installation extlinux MBR on first sector of hard drive (whole device)
+	sudo dd if=/usr/lib/EXTLINUX/mbr.bin of=/dev/${disk} > /dev/null 2>&1;
+
+	#creating extlinux configuration file
+	cat > extlinux.conf <<EOF
+default immudex
+label immudex
+kernel /live/vmlinuz
+append quiet initrd=/live/initrd boot=live overlay-size=25% apparmor=1 security=apparmor
+EOF
+	sudo cp extlinux.conf /media/extlinux > /dev/null 2>&1;
+  rm extlinux.conf;
+
+  #Unmounting filesystems
+  sudo umount /media > /dev/null 2>&1;
+  if [ $? -eq 0 ]; then echo -e "[ ${GREEN}OK${ENDCOLOR} ]"; fi
+fi

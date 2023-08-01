@@ -1,0 +1,9 @@
+#!/bin/bash
+
+if grep -q 'trixie' /etc/os-release; then
+  echo -n '-testing';
+elif grep -q 'buster' /etc/os-release; then
+  echo -n '-lhe';
+else 
+  echo -n '-stable';
+fi

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+bootID=$(sed 's/-//g' /proc/sys/kernel/random/boot_id | cut -c 26-33);
+if hostnamectl > /dev/null 2>&1; then
+	hName="$(hostnamectl | grep 'Chassis' | cut -d ":" -f 2 | awk '{printf $1}')-${bootID}";
+else
+	hName="$(sudo dmidecode -s chassis-type | head -1 | tr [A-Z] [a-z])-${bootID}";
+fi
+
+sudo hostnamectl set-hostname $hName;
+sudo sed -i "s/immudex/${hName}/g" /etc/hosts;
+echo $hName | sudo tee /etc/hostname > /dev/null;

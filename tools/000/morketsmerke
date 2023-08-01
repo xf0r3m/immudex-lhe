@@ -1,0 +1,70 @@
+#!/bin/bash
+
+function help() {
+  echo "======================================================================";
+  echo "morketsmerke - script for fetch and adjust morketsmerke.net site";
+  echo "as offline available source of information.";
+  echo "morketsmerke.net COPYLEFT @ 2022";
+  echo;
+  echo "Options:";
+  echo "  --browser - launching fetched site in default application for open"
+  echo "  html sites";
+  echo "  -[-]<any_other_chars_or_strings> - print this message";
+  echo "By default script open downloaded site in terminal via W3M browser with";
+  echo "monochrome mode";
+  echo;
+  echo "Usage:";
+  echo "  $ morketsmerke [--browser]";
+}
+
+function R() {
+  
+  if [ "$path" ]; then path=${path}/${1};
+  else path=$1;
+  fi
+
+  fileList=$(ls $path);
+  for file in $fileList; do
+    if [ -d ${path}/${file} ]; then R ${file};
+    else
+      sed -i 's@https://morketsmerke.github.io/@/usr/share/doc/morketsmerke/index.html@' ${path}/${file};
+      sed -i 's@https://morketsmerke.github.io@/usr/share/doc/morketsmerke/index.html@'  ${path}/${file};
+      sed -i 's@/style.css@/usr/share/doc/morketsmerke/style.css@' ${path}/${file};
+    fi
+  done
+  path=$(echo $path | sed "s@/$1@@")
+
+}
+
+function install_morketsmerke() {
+
+  if [ -d morketsmerke.github.io ]; then rm -rf morketsmerke.github.io; fi
+  if [ ! -d morketsmerke.github.io ]; then
+    git clone https://github.com/morketsmerke/morketsmerke.github.io;
+  else
+    exit 1;
+  fi
+
+  R morketsmerke.github.io
+
+  if [ -d /usr/share/doc/morketsmerke ]; then 
+    sudo rm -rf /usr/share/doc/morketsmerke;
+  fi
+
+  sudo mv morketsmerke.github.io /usr/share/doc/morketsmerke
+
+}
+
+/usr/bin/ping -c 1 wp.pl >> /dev/null 2>&1;
+if [ $? -eq 0 ]; then install_morketsmerke; fi
+
+morketsmerke_path=/usr/share/doc/morketsmerke;
+
+if [ "$1" ] && [ "$1" = "--browser" ]; then
+  xdg-open ${morketsmerke_path}/index.html;
+elif [ "$1" ]; then
+  help;
+  exit 1;
+else
+  w3m -M ${morketsmerke_path}/index.html;
+fi
