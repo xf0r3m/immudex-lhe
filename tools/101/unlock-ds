@@ -1,0 +1,86 @@
+#!/bin/bash
+
+function help() {
+echo "immudex-unlock-ds - Shell script for unlocking data store (cryptfs).";
+echo "@ 2023 morketsmerke.org"
+echo;
+echo "This script will unmount every file system mounted in cryptfs. If FS is";
+echo "locked then will kill every process that have opened file in that FS and";
+echo "finally in cryptfs unlocking him also. So use wisely.";
+echo;
+echo "Options: ";
+echo "  -h - This message";
+}
+
+# Function that getting PID of processes that have open file in DS
+function getPids() {
+ sudo lsof 2>/dev/null | grep "$@" | awk '{printf $2"\n"}' | sort | uniq | awk '{printf $1" "}';
+} 
+
+# Reading argv[1] to get help message";
+if [ "$1" ] && [ "$1" = "-h" ]; then
+  help;
+  exit 1;
+fi
+
+# Disclaimer and question about continuing
+echo "This script will unmount every file system mounted in cryptfs. If FS is";
+echo "locked then will kill every process that have opened file in that FS and";
+echo "finally in cryptfs unlocking him also. So use wisely.";
+echo -n "Do you wish to contiue? (y/n):";
+read -n 1 cont;
+if [ "$cont" != "y" ]; then exit 1; fi
+
+
+dataStoresMountPoints=$(immudex-crypt list | grep 'immudex-crypt[0-9]*' | awk '{printf $3" "}');
+for dataStoreMountPoint in $dataStoresMountPoints; do
+  # Check is there any file system mounted inside data store.
+  mountPointsInDS=$(df | grep "${dataStoreMountPoint}/.*" | awk '{printf $6" "}');
+  for mountPoint in $mountPointsInDS; do 
+    # Try to umount FS in DS
+    sudo umount $mountPoint >> /dev/null 2>&1;
+    if [ $? -ne 0 ]; then
+      # Try to unlock mounted FS by killing processes that have open files
+      # inside mount point.
+      sudo kill $(getPids $mountPoint);
+      # Try umount FS once again.
+      sudo umount $mountPoint >> /dev/null 2>&1;
+      if [ $? -ne 0 ]; then
+        # FS are still mounted. Try to send a SIGKILL signal to them.
+        sudo kill -9 $(getPids $mountPoint);
+        # Try umount once again.
+        sudo umount $mountPoint >> /dev/null 2>&1;
+        if [ $? -ne 0 ]; then
+          echo "File systems mounted in data store are still lock. Needs user intervention";
+          exit 1;
+        else
+          echo "The $mountPoint was unmounted.";
+        fi
+      else
+        echo "The $mountPoint was unmounted.";
+      fi
+    else
+      echo "The $mountPoint was unmounted.";
+    fi
+  done
+  # Check there are processes that have opened file from data store.
+  pidsList=$(getPids $dataStoreMountPoint);
+  if [ $(echo $pidsList | wc -w) -gt 0 ]; then
+    sudo kill $pidsList;
+    # Refresh pidsList
+    pidsList=$(getPids $dataStoreMountPoint);
+    if [ $(echo $pidsList | wc -w) -gt 0 ]; then
+      sudo kill -9 $pidsList;
+      pidsList=$(getPids $dataStoreMountPoint);
+      if [ $(echo $pidsList | wc -w) -eq 0 ]; then
+       echo "Data store: $dataStoreMountPoint is unlocked.";
+      else
+        echo "Data store: $dataStoreMountPoint is still locked. Needs user intervention";
+      fi
+    else
+      echo "Data store: $dataStoreMountPoint is unlocked.";
+    fi
+  else
+    echo "Data store: $dataStoreMountPoint  isn't locked. Nothing to do.";
+  fi
+done

@@ -1,0 +1,177 @@
+#!/bin/bash
+
+function createBufferFile() {
+  count=0;
+  for mark in $markList; do
+    if [ $count -gt 0 ]; then
+      sed -i "s,$mark,${mark}\n,g" ${1}.buffer;
+    else
+      sed "s,$mark,${mark}\n,g" $1 > ${1}.buffer;
+      count=$((count + 1));
+    fi;
+  done
+}
+
+function descSanitize() {
+  desc=$(echo $@ | sed -e 's,<!\[CDATA\[,,' -e 's,<img.*/>,,' -e 's,\]\]>,,' -e 's,<description>,,' -e 's,</description>,,' -e 's,&lt;,<,g' -e 's,&gt;,>,g' -e 's,<p>,,g' -e 's,<a href=".*">,,' -e 's,</a>,,' -e 's,</p>,,' -e 's/^[[:space:]]*//g');
+  echo -n $desc;
+}
+
+function titleSanitize() {
+  title=$(echo $@ | sed -e 's,<title>,,' -e 's,</title>,,' -e 's,&quot;,",g' -e 's/^[[:space:]]*//g');
+  echo -n $title;
+}
+
+function pubDateSanitize() {
+  pubDate=$(echo $@ | sed -e 's,<pubDate>,,' -e 's,</pubDate>,,' -e 's/^[[:space:]]*//g');
+  echo -n $pubDate;
+}
+
+function linkSanitize() {
+  link=$(echo $@ | sed -e 's,<link>,,' -e 's,</link>,,' -e 's/^[[:space:]]*//g');
+  echo -n $link;
+}
+
+function show() {
+  bufferFile="${1}.buffer";
+  if grep -q '<lastBuildDate>' $bufferFile; then
+    sed -i -e 's,<lastBuildDate>,<pubDate>,g' -e 's,</lastBuildDate>,</pubDate>,g' $bufferFile;
+  fi
+  if [ ! "$2" ]; then
+    newsCount=$(grep -o '<title>.*</title>' $bufferFile | wc -l | awk '{printf $1}');
+    count=1
+  else
+    count=$(expr $2 + 1);
+    newsCount=$count;
+  fi
+  while [ $count -le $newsCount ]; do
+    t=$(grep -o '<title>.*</title>' $bufferFile | sed -n "${count}p");
+    title=$(titleSanitize $t);
+    pD=$(grep -o '<pubDate>.*</pubDate>' $bufferFile | sed -n "${count}p")
+    pubDate=$(pubDateSanitize $pD);
+    d=$(grep -o '<description>.*</description>' $bufferFile | sed -n "${count}p")
+    desc=$(descSanitize $d);
+    echo -e "\t$((count - 1)) (Link ID: $count): $title";
+    echo -e "\t -> $pubDate";
+    echo -e "\t >>> $desc";
+    echo;
+    count=$((count + 1))
+  done
+}
+
+function getLink() {
+  bufferFile="${1}.buffer";
+  newsNumber=$2;
+  linkLine=$(grep -o '<link>.*</link>' $bufferFile | sed -n "${newsNumber}p");
+  link=$(linkSanitize $linkLine);
+  echo -n $link;
+}
+
+function executeCreateBufferFile() {
+  fname=$1;
+  export markList=$(grep -o '</[a-z]*\:*[a-z]*[A-Z]*[a-z]*[A-Z]*[a-z]*>' $fname | sort | uniq | awk '{printf $1" "}');
+  createBufferFile $fname;
+}
+
+function help() {
+  echo "immudex-newsfeed - fetch and browse news feed from rss and atom channels";
+  echo "@ 2023 morketsmerke.org";
+  echo;
+  echo "Options:";
+  echo "  --list - shows numbered list of names, saved in ~/.newsfeed names and";
+  echo "    URL of rss channels";
+  echo "  --check [--show-one] - fetching new rss channel file from source";
+  echo "    [ and show first news from channel (as a notification) ]";
+  echo "  --show <number_of_channel> - shows numbered list of news titles.";
+  echo "    Number of channel you can get from --list option.";
+  echo "  --open <number_of_title> - open web browser on link, which are under";
+  echo "    titles of news on rss channel. Number of title you can get";
+  echo "    from --show option. This option based on the last showed rss";
+  echo "    channel feed.";
+  echo;
+  echo "The ~/.newsfeed file:";
+  echo "  This file is simple csv (semicolon separated values) file which";
+  echo "  store rss channels in one line. One by one. The one line";
+  echo "  contains: name and URL of rss feed. For example:";
+  echo;
+  echo "    News Feed;https://newsfeed.example.org/rss";
+}
+ 
+if [ ! -s ~/.newsfeed ]; then
+  help;
+  exit 1;
+else
+  if [ ! "$1" ] || ([ "$1" != "--list" ] && \
+    [ "$1" != "--check" ] && \
+    [ "$1" != "--show" ] && \
+    [ "$1" != "--open" ]); then
+      help;
+      exit 1;
+  fi
+  amountOfSubscriptions=$(cat ~/.newsfeed | wc -l);
+  i=1;
+  while [ $i -le $amountOfSubscriptions ]; do
+    newsfeedLine=$(sed -n "${i}p" ~/.newsfeed);
+    nameOfSubscription=$(echo $newsfeedLine | cut -d ";" -f 1);
+    rssLink=$(echo $newsfeedLine | cut -d ";" -f 2);
+    if [ "$1" ] && [ "$1" = "--list" ]; then
+      echo -e "${i}. ${nameOfSubscription}";
+    elif [ "$1" ] && [ "$1" = "--check" ]; then
+      echo -e "${i}. ${nameOfSubscription}";
+      echo -n "Getting news feed...";
+      wget $rssLink -O /tmp/new_newsfeed_${i}.xml 2>/dev/null;
+      if [ $? -eq 0 ]; then echo "[ OK ]";
+      else echo -e "\nThere is no Internet connection"; exit 1; fi
+      if [ -s /tmp/newsfeed_${i}.xml ]; then
+        executeCreateBufferFile /tmp/new_newsfeed_${i}.xml;
+        amountOfNewNewses=$(diff /tmp/new_newsfeed_${i}.xml.buffer /tmp/newsfeed_${i}.xml.buffer | grep '<title>' | wc -l);
+        if [ $amountOfNewNewses -gt 0 ]; then 
+          notify-send "$nameOfSubscription" "New $amountOfNewNewses newses" --icon=/usr/share/icons/rss.png;
+          mv /tmp/new_newsfeed_${i}.xml /tmp/newsfeed_${i}.xml;
+          executeCreateBufferFile /tmp/newsfeed_${i}.xml;
+          news=$(show /tmp/newsfeed_${i}.xml 1);
+          notify-send "newsfeed" "${nameOfSubscription}:\n${news}" -t ${i}0000 --icon=/usr/share/icons/rss.png;
+          #j=1;
+          #sleep 1;
+          #while [ $j -le 1 ]; do
+          #  news=$(diff /tmp/new_newsfeed_${i}.xml /tmp/newsfeed_${i}.xml | \
+          #           grep '<title>' | sed -n "${j}p" | sed 's/<title>//' | \
+          #            sed 's/<\/title>//' | sed 's/[<>]//' | \
+          #            sed 's/^[[:space:]]*//g');
+          #  notify-send "newsfeed" "${nameOfSubscription}: ${news}" -t 10000 --icon=/usr/share/icons/rss.png;
+          #  sleep 1;
+          #  j=$((j + 1));
+          #done
+        fi
+      else
+        mv /tmp/new_newsfeed_${i}.xml /tmp/newsfeed_${i}.xml;
+        amountOfNews=$(grep '<title>' /tmp/newsfeed_${i}.xml | sed -n '2,$p' | wc -l);
+        if [ $amountOfNews -eq 0 ]; then
+          compressed=1;
+          amountOfNews=$(sed 's/<\/title>/\n/g' /tmp/newsfeed_${i}.xml | sed 's/<item>/\n/g' | grep '<title>' | wc -l)
+        fi
+        notify-send "$nameOfSubscription" "New $amountOfNews newses" --icon=/usr/share/icons/rss.png;
+        executeCreateBufferFile /tmp/newsfeed_${i}.xml;
+        if [ "$2" ] && [ "--show-one" ]; then
+          news=$(show /tmp/newsfeed_${i}.xml 1);
+          notify-send "newsfeed" "${nameOfSubscription}:\n${news}" -t ${i}0000 --icon=/usr/share/icons/rss.png;
+        fi
+      fi
+    fi
+      i=$((i + 1));
+  done
+  if [ "$1" ] && [ "$1" = "--show" ] && [ "$2" ] && [ $2 -gt 0 ]; then
+    
+    #Parsing
+    #Thanks to the linuxhint.com for command:
+    #sed 's/^[[:space]]*//g'
+    #https://linuxhint.com/trim_string_bash
+    show /tmp/newsfeed_${2}.xml | less
+    echo $2 > /tmp/lastShowedNewsFeed;
+  elif [ "$1" ] && [ "$1" = "--open" ] && [ "$2" ] && [ $2 -gt 0 ]; then
+    subscriptionNumber=$(cat /tmp/lastShowedNewsFeed);
+    fname="/tmp/newsfeed_${subscriptionNumber}.xml";
+    link=$(getLink $fname $2); 
+    exo-open --launch WebBrowser "$link";
+  fi
+fi

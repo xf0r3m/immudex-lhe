@@ -1,0 +1,45 @@
+#!/bin/bash
+
+#/usr/bin/figlet immudex;
+source /usr/local/bin/library.sh;
+ascii_colors;
+echo;
+echo "Today is: $(date)";
+echo;
+echo "System summary: ";
+cpuIdle=$(vmstat | tail -1 | awk '{printf $15}');
+cpuUsage=$((100 - $cpuIdle));
+echo -e "  \tCPU: ${cpuUsage}%";
+echo -e "  \tMEM: $(free -h | sed -n '2p' | awk '{printf $7}' | sed 's/i//') Free";
+if $(df -h 2> /dev/null | grep -q '/dev/mapper'); then
+  i=1;
+  echo -e "  \tCRYPT_PARTi: Free/Total (Usage%)";
+  amountOfDisks=$(df -h 2> /dev/null | grep '/dev/mapper' | wc -l | awk '{printf $1}');
+  while [ $i -le $amountOfDisks ]; do
+    diskSize=$(df -h 2> /dev/null | grep '/dev/mapper' | sed -n "${i}p" | awk '{printf $2}');
+    diskFree=$(df -h 2> /dev/null | grep '/dev/mapper' | sed -n "${i}p" | awk '{printf $4}');
+    diskUsage_perc=$(df -h 2> /dev/null | grep '/dev/mapper' | sed -n "${i}p" | sed 's/%//' | awk '{printf $5}');
+  #FCP = First Crypt Partition
+    echo -e "  \tCRYPT_PART${i}: ${diskFree}/${diskSize}   (${diskUsage_perc}%)";
+    i=$((i + 1));
+  done
+else
+  echo -e "  \tCRYPT_PART: N/A";
+fi
+echo -e "  \tPROCESSES: $(ps -aux | wc -l | awk '{printf $1}')";
+if $(uptime | grep -q 'day'); then
+  utime=$(uptime | awk '{printf $3" "$4" "$5}' | sed -e 's/\,$//' -e 's,:,h ,');
+  echo -e "\tUPTIME: ${utime}m";
+else
+  utime=$(uptime | awk '{printf $3}' | sed -e 's/,//' -e 's,:,h ,');
+  if $(echo $utime | grep -q "h"); then
+    echo -e "  \tUPTIME: ${utime}m";
+  else
+    echo -e "  \tUPTIME: 0h ${utime}m";
+  fi
+fi
+echo -e " \t$(uptime | grep -o "load.*$" | tr [a-z] [A-Z])";
+echo;
+echo -e "morketsmerke.org @ 2023 https://github.com/xf0r3m/immudex";
+echo;
+echo "====================================================================";
