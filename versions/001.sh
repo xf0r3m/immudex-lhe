@@ -29,7 +29,7 @@ tar -xf ~/immudex-lhe/files/${VERSION}/librewolf.tgz -C /etc/skel;
 
 cp -vv ~/immudex-lhe/tools/${VERSION}/idle-clic /usr/local/bin;
 cp -vv ~/immudex-lhe/tools/${VERSION}/pl /usr/local/bin;
-cp -vv ~/immudex-lhe/tools/${VERSION}/secure-firefox /usr/local/bin;
+cp -vv ~/immudex-lhe/tools/${VERSION}/secured-firefox /usr/local/bin;
 cp -vv ~/immudex-lhe/tools/${VERSION}/library.sh /usr/local/bin;
 cp -vv ~/immudex-lhe/tools/${VERSION}/motd2 /usr/local/bin;
 cp -vv ~/immudex-lhe/tools/${VERSION}/newsfeed /usr/local/bin;
