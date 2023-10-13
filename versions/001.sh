@@ -27,18 +27,18 @@ rm -rfv /usr/lib/icecat;
 tar -xf ~/immudex-lhe/files/${VERSION}/librewolf.tgz -C /etc/skel;
 
 
-cp -vv ~/immudex-lhe/${VERSION}/idle-clic /usr/local/bin;
-cp -vv ~/immudex-lhe/${VERSION}/pl /usr/local/bin;
-cp -vv ~/immudex-lhe/${VERSION}/secure-firefox /usr/local/bin;
-cp -vv ~/immudex-lhe/${VERSION}/library.sh /usr/local/bin;
-cp -vv ~/immudex-lhe/${VERSION}/motd2 /usr/local/bin;
-cp -vv ~/immudex-lhe/${VERSION}/newsfeed /usr/local/bin;
-cp -vv ~/immudex-lhe/${VERSION}/sync.sh /usr/local/bin;
-cp -vv ~/immudex-lhe/${VERSION}/unlock-ds /usr/local/bin;
+cp -vv ~/immudex-lhe/tools/${VERSION}/idle-clic /usr/local/bin;
+cp -vv ~/immudex-lhe/tools/${VERSION}/pl /usr/local/bin;
+cp -vv ~/immudex-lhe/tools/${VERSION}/secure-firefox /usr/local/bin;
+cp -vv ~/immudex-lhe/tools/${VERSION}/library.sh /usr/local/bin;
+cp -vv ~/immudex-lhe/tools/${VERSION}/motd2 /usr/local/bin;
+cp -vv ~/immudex-lhe/tools/${VERSION}/newsfeed /usr/local/bin;
+cp -vv ~/immudex-lhe/tools/${VERSION}/sync.sh /usr/local/bin;
+cp -vv ~/immudex-lhe/tools/${VERSION}/unlock-ds /usr/local/bin;
 
 chmod +x /usr/local/bin/*;
 
-cp -rvv ~/immudex-lhe/${VERSION}/files/sync.sh /usr/share/;
+cp -rvv ~/immudex-lhe/files/${VERSION}/sync.sh /usr/share;
 
 recreate_user;
 
