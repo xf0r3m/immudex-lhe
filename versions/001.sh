@@ -40,7 +40,7 @@ chmod +x /usr/local/bin/*;
 
 cp -rvv ~/immudex-lhe/files/${VERSION}/sync.sh /usr/share;
 
-recreate_user;
+recreate_users;
 
 tidy;
 
