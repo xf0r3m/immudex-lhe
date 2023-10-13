@@ -1,0 +1,9 @@
+#!/bin/bash
+
+if [ ! -d /tmp/${USER} ]; then
+  mkdir /tmp/${USER}
+  cp -prvv /home/${USER}/.librewolf /tmp/${USER}
+fi
+
+eth0=$(ip route show | grep 'default' | awk '{printf $5}');
+firejail --private=/tmp/${USER} --net=$eth0 /usr/bin/librewolf

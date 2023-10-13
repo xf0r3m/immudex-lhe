@@ -34,7 +34,6 @@ cp -vv ~/immudex-lhe/tools/${VERSION}/library.sh /usr/local/bin;
 cp -vv ~/immudex-lhe/tools/${VERSION}/motd2 /usr/local/bin;
 cp -vv ~/immudex-lhe/tools/${VERSION}/newsfeed /usr/local/bin;
 cp -vv ~/immudex-lhe/tools/${VERSION}/sync.sh /usr/local/bin;
-cp -vv ~/immudex-lhe/tools/${VERSION}/unlock-ds /usr/local/bin;
 
 chmod +x /usr/local/bin/*;
 
