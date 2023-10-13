@@ -14,7 +14,7 @@ update_packages;
 wget https://github.com/yt-dlp/yt-dlp/releases/download/2023.10.07/yt-dlp -O /usr/bin/youtube-dl;
 
 install_packages firejail;
-cp -vv ~/immudex/files/${VERSION}/firejail.config /etc/firejail;
+cp -vv ~/immudex-lhe/files/${VERSION}/firejail.config /etc/firejail;
 
 wget https://ftp.morketsmerke.org/immudex/testing/software/librewolf/librewolf-118.0.1-1.en-US.linux-i686.tar.bz2;
 tar -xf librewolf-118.0.1-1.en-US.linux-i686.tar.bz2 -C /usr/lib;
