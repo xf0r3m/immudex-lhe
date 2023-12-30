@@ -1,0 +1,27 @@
+immudex-lhe 0.0.1 - aktualizacja pakietów oraz zbliżenie LHE do pozostałych wersji
+
+        1. Aktualizacja pakietów
+
+        2. Aktualizacja skryptu yt-dlp
+
+        3. Instalacja Firejail oraz jego konfiguracja.
+
+        4. Zastąpienie przeglądarki GNU IceCat przeglądarką LibreWolf, z
+            domyślnym profile, przygotowanym dla immudex oraz immudex-testing.
+
+        5. Usunięcie GNU IceCat z systemu.
+
+        6. Dołączenie skryptu uruchamiającego LibreWolf przez Firejail
+            - 'secured-firefox'
+
+        7. Aktualizcja takich narzędzi jak:
+            - 'pl'
+            - 'library.sh'
+            - 'motd2'
+            - 'newsfeed'
+            - 'sync.sh'
+            Wersje te są zgodne z tymi wykorzystywanymi przez wersję stabilną.
+            Dlatego też po więcej szczegółów zapraszam do changelogów wersji
+            stabilnej.
+
+        8. Dodanie narzędzia 'idle-clic'
