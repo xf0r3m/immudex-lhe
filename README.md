@@ -4,6 +4,8 @@
 
 ## GNU/LINUX Debian oldoldstable (buster)
 
+## To repozytorium zostało zarchiwizowane ze zwględu na przeprowadzoną unifikację projektów immudex. Obecnie właściwe repozytorium znajduje się pod adresem: [https://github.com/xf0r3m/immudex](https://github.com/xf0r3m/immudex)
+
 To repozytorium zawiera pliki służące do tworzenia dystrybucji immudex.
 Zawiera ono wiele ciekawych informacji, jednak podstawowe infomacje na temat 
 tej dystrybucji (wraz z adresami do serwerów lustrzanych z obrazmi płyt)
