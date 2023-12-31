@@ -1,0 +1,7 @@
+immudex-lhe 0.0.2 - finalny obraz płyty
+
+        1. Aktualizacja pakietów
+
+        2. Aktualizacja skryptu yt-dlp
+
+        3. Aktualizacja przeglądarki librewolf.
